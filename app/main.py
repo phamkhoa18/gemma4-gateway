@@ -23,7 +23,7 @@ load_dotenv()
 # === Configuration ===
 ADMIN_PIN = os.getenv("ADMIN_PIN", "123456")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gemma-4-31b")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemma-4-26b-a4b")
 GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "3000"))
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
