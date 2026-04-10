@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemma 4 Gateway — Admin Dashboard</title>
+    <meta name="description" content="Gemma 4 31B AI API Gateway with key management and playground">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: {
+                        brand: { 50:'#eef2ff', 100:'#e0e7ff', 200:'#c7d2fe', 300:'#a5b4fc', 400:'#818cf8', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca', 800:'#3730a3', 900:'#312e81' },
+                        surface: { 50:'#f8fafc', 100:'#f1f5f9', 700:'#1e293b', 800:'#0f172a', 900:'#020617' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { scrollbar-width: thin; scrollbar-color: #334155 transparent; }
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(99, 102, 241, 0.15); }
+        .glow { box-shadow: 0 0 30px rgba(99, 102, 241, 0.15); }
+        .card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(99, 102, 241, 0.2); }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .typing-dot { animation: typing 1.4s infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+        .msg-user { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); }
+        .msg-ai { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); border: 1px solid rgba(99,102,241,0.1); }
+        pre code { white-space: pre-wrap; word-break: break-word; }
+    </style>
+</head>
+<body class="bg-surface-900 text-gray-100 font-sans min-h-screen">
+
+<!-- Login Screen -->
+<div id="loginScreen" class="fixed inset-0 flex items-center justify-center z-50" style="background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%);">
+    <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-600/10 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl"></div>
+    </div>
+    <div class="glass rounded-3xl p-10 w-full max-w-md mx-4 relative glow fade-in">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-gradient-to-br from-brand-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-500/25">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-white to-brand-300 bg-clip-text text-transparent">Gemma 4 Gateway</h1>
+            <p class="text-gray-400 text-sm mt-1">Enter admin PIN to continue</p>
+        </div>
+        <div class="flex justify-center gap-3 mb-6" id="pinDots">
+            <input type="password" id="pinInput" maxlength="6" class="w-full text-center text-2xl tracking-[1em] bg-surface-800/60 border border-gray-700 rounded-xl py-4 px-6 text-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 outline-none transition-all" placeholder="••••••" autofocus>
+        </div>
+        <button onclick="login()" class="w-full bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-semibold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40">
+            Unlock Dashboard
+        </button>
+        <p id="loginError" class="text-red-400 text-sm text-center mt-3 hidden">Wrong PIN. Try again.</p>
+    </div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp" class="hidden">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 bottom-0 w-64 glass border-r border-gray-800/50 flex flex-col z-40">
+        <div class="p-6 border-b border-gray-800/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-brand-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/25">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+                <div>
+                    <h2 class="font-bold text-white">Gemma 4</h2>
+                    <p class="text-xs text-gray-400">Gateway v1.0</p>
+                </div>
+            </div>
+        </div>
+        <nav class="flex-1 p-4 space-y-1">
+            <button onclick="showTab('dashboard')" id="tab-dashboard" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-400 hover:text-white hover:bg-white/5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zm0 7a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1v-5zM4 13a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1v-5z"/></svg>
+                Dashboard
+            </button>
+            <button onclick="showTab('keys')" id="tab-keys" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-400 hover:text-white hover:bg-white/5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                API Keys
+            </button>
+            <button onclick="showTab('playground')" id="tab-playground" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-400 hover:text-white hover:bg-white/5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Playground
+            </button>
+            <button onclick="showTab('docs')" id="tab-docs" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-400 hover:text-white hover:bg-white/5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                API Docs
+            </button>
+        </nav>
+        <div class="p-4 border-t border-gray-800/50">
+            <div id="statusIndicator" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-800/40">
+                <div class="w-2 h-2 rounded-full bg-gray-500 pulse-dot" id="statusDot"></div>
+                <span class="text-xs text-gray-400" id="statusText">Checking...</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="ml-64 min-h-screen p-8">
+        <!-- Dashboard -->
+        <div id="page-dashboard" class="page hidden">
+            <h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+                <div class="glass rounded-2xl p-5 card-hover">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm text-gray-400">vLLM Status</span>
+                        <div class="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-bold" id="stat-vllm">—</p>
+                    <p class="text-xs text-gray-500 mt-1" id="stat-model">—</p>
+                </div>
+                <div class="glass rounded-2xl p-5 card-hover">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm text-gray-400">GPU</span>
+                        <div class="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-bold" id="stat-gpu">—</p>
+                    <p class="text-xs text-gray-500 mt-1" id="stat-gpu-mem">—</p>
+                </div>
+                <div class="glass rounded-2xl p-5 card-hover">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm text-gray-400">API Keys</span>
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-bold" id="stat-keys">—</p>
+                    <p class="text-xs text-gray-500 mt-1" id="stat-active">—</p>
+                </div>
+                <div class="glass rounded-2xl p-5 card-hover">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm text-gray-400">Total Requests</span>
+                        <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-bold" id="stat-requests">—</p>
+                    <p class="text-xs text-gray-500 mt-1">All time</p>
+                </div>
+            </div>
+            <!-- Recent Logs -->
+            <div class="glass rounded-2xl p-6">
+                <h3 class="font-semibold mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Recent Activity
+                </h3>
+                <div id="logsTable" class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead><tr class="text-gray-500 text-xs uppercase border-b border-gray-800">
+                            <th class="pb-3 text-left">Time</th><th class="pb-3 text-left">User</th><th class="pb-3 text-left">Tokens</th><th class="pb-3 text-left">Latency</th>
+                        </tr></thead>
+                        <tbody id="logRows" class="divide-y divide-gray-800/50"></tbody>
+                    </table>
+                    <p id="noLogs" class="text-center text-gray-500 py-8">No activity yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Keys -->
+        <div id="page-keys" class="page hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold">API Keys</h1>
+                <button onclick="showCreateKey()" class="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-brand-500/20 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Create Key
+                </button>
+            </div>
+            <div id="keysList" class="space-y-3"></div>
+            <div id="noKeys" class="glass rounded-2xl p-12 text-center hidden">
+                <svg class="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                <p class="text-gray-400">No API keys yet</p>
+                <p class="text-gray-600 text-sm mt-1">Create your first key to get started</p>
+            </div>
+        </div>
+
+        <!-- Playground -->
+        <div id="page-playground" class="page hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold">Playground</h1>
+                <button onclick="clearChat()" class="text-gray-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    Clear
+                </button>
+            </div>
+            <div class="glass rounded-2xl flex flex-col" style="height: calc(100vh - 160px);">
+                <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <div class="text-center py-16">
+                        <div class="w-14 h-14 bg-gradient-to-br from-brand-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-white">Gemma 4 31B</h3>
+                        <p class="text-gray-400 text-sm mt-1">Start a conversation to test the model</p>
+                    </div>
+                </div>
+                <div class="border-t border-gray-800/50 p-4">
+                    <div class="flex gap-3">
+                        <input id="chatInput" type="text" placeholder="Type your message..." 
+                            class="flex-1 bg-surface-800/60 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
+                            onkeydown="if(event.key==='Enter')sendMessage()">
+                        <button onclick="sendMessage()" id="sendBtn" class="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-5 py-3 rounded-xl transition-all shadow-lg shadow-brand-500/20 flex items-center gap-2 text-sm font-medium">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Docs -->
+        <div id="page-docs" class="page hidden">
+            <h1 class="text-2xl font-bold mb-6">API Documentation</h1>
+            <div class="glass rounded-2xl p-6 space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold mb-2 text-brand-400">Base URL</h3>
+                    <code class="block bg-surface-800 rounded-lg p-4 text-sm font-mono text-green-400" id="docBaseUrl">http://your-server:3000/v1</code>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-2 text-brand-400">Authentication</h3>
+                    <p class="text-gray-400 text-sm mb-2">Add your API key to the Authorization header:</p>
+                    <code class="block bg-surface-800 rounded-lg p-4 text-sm font-mono text-green-400">Authorization: Bearer gm4-your-api-key</code>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-2 text-brand-400">Chat Completions</h3>
+                    <p class="text-gray-400 text-sm mb-2">OpenAI-compatible chat endpoint:</p>
+                    <pre class="bg-surface-800 rounded-lg p-4 text-sm font-mono text-green-400 overflow-x-auto"><code>curl -X POST http://your-server:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer gm4-your-api-key" \
+  -d '{
+    "model": "gemma-4-31b",
+    "messages": [
+      {"role": "user", "content": "Xin chào!"}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 2048
+  }'</code></pre>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-2 text-brand-400">Python (OpenAI SDK)</h3>
+                    <pre class="bg-surface-800 rounded-lg p-4 text-sm font-mono text-green-400 overflow-x-auto"><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://your-server:3000/v1",
+    api_key="gm4-your-api-key"
+)
+
+response = client.chat.completions.create(
+    model="gemma-4-31b",
+    messages=[{"role": "user", "content": "Xin chào!"}],
+    temperature=0.7,
+    max_tokens=2048
+)
+print(response.choices[0].message.content)</code></pre>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-2 text-brand-400">JavaScript (fetch)</h3>
+                    <pre class="bg-surface-800 rounded-lg p-4 text-sm font-mono text-green-400 overflow-x-auto"><code>const response = await fetch('http://your-server:3000/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer gm4-your-api-key'
+  },
+  body: JSON.stringify({
+    model: 'gemma-4-31b',
+    messages: [{ role: 'user', content: 'Xin chào!' }]
+  })
+});
+const data = await response.json();
+console.log(data.choices[0].message.content);</code></pre>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Create Key Modal -->
+<div id="createKeyModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="glass rounded-2xl p-8 w-full max-w-md mx-4 fade-in glow">
+        <h3 class="text-xl font-bold mb-6">Create API Key</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="text-sm text-gray-400 mb-1 block">Key Name</label>
+                <input id="keyName" type="text" placeholder="e.g. Production App" class="w-full bg-surface-800/60 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all">
+            </div>
+            <div>
+                <label class="text-sm text-gray-400 mb-1 block">Rate Limit (req/min)</label>
+                <input id="keyRate" type="number" value="60" class="w-full bg-surface-800/60 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all">
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="closeCreateKey()" class="flex-1 bg-surface-800 hover:bg-surface-700 text-gray-300 font-medium py-3 rounded-xl transition-all text-sm">Cancel</button>
+            <button onclick="createKey()" class="flex-1 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-medium py-3 rounded-xl transition-all shadow-lg shadow-brand-500/20 text-sm">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Key Created Modal -->
+<div id="keyCreatedModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="glass rounded-2xl p-8 w-full max-w-lg mx-4 fade-in glow">
+        <div class="text-center mb-4">
+            <div class="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <h3 class="text-xl font-bold">Key Created!</h3>
+            <p class="text-gray-400 text-sm mt-1">Copy it now — it won't be shown again in full.</p>
+        </div>
+        <div class="bg-surface-800 rounded-xl p-4 flex items-center gap-3 mb-6">
+            <code id="newKeyValue" class="flex-1 text-sm font-mono text-green-400 break-all"></code>
+            <button onclick="copyNewKey()" class="text-brand-400 hover:text-brand-300 transition-colors p-2" title="Copy">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            </button>
+        </div>
+        <button onclick="closeKeyCreated()" class="w-full bg-surface-800 hover:bg-surface-700 text-gray-300 font-medium py-3 rounded-xl transition-all text-sm">Done</button>
+    </div>
+</div>
+
+<script>
+let adminPin = '';
+const BASE = '';
+
+// === Auth ===
+function login() {
+    const pin = document.getElementById('pinInput').value;
+    fetch(`${BASE}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+    })
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(() => {
+        adminPin = pin;
+        localStorage.setItem('gm4_pin', pin);
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        showTab('dashboard');
+        updateDocsUrl();
+    })
+    .catch(() => {
+        document.getElementById('loginError').classList.remove('hidden');
+        document.getElementById('pinInput').value = '';
+        document.getElementById('pinInput').focus();
+    });
+}
+
+// Auto-login
+window.addEventListener('DOMContentLoaded', () => {
+    const saved = localStorage.getItem('gm4_pin');
+    if (saved) {
+        document.getElementById('pinInput').value = saved;
+        login();
+    }
+    document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+});
+
+function authHeaders() {
+    return { 'Authorization': `Admin ${adminPin}`, 'Content-Type': 'application/json' };
+}
+
+// === Navigation ===
+function showTab(tab) {
+    document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.nav-btn').forEach(b => {
+        b.classList.remove('bg-brand-500/10', 'text-brand-400');
+        b.classList.add('text-gray-400');
+    });
+    document.getElementById(`page-${tab}`).classList.remove('hidden');
+    document.getElementById(`tab-${tab}`).classList.add('bg-brand-500/10', 'text-brand-400');
+    document.getElementById(`tab-${tab}`).classList.remove('text-gray-400');
+    
+    if (tab === 'dashboard') loadStats();
+    if (tab === 'keys') loadKeys();
+}
+
+// === Dashboard ===
+async function loadStats() {
+    try {
+        const r = await fetch(`${BASE}/api/admin/stats`, { headers: authHeaders() });
+        const d = await r.json();
+        
+        document.getElementById('stat-vllm').textContent = d.vllm_status === 'online' ? '● Online' : '○ Offline';
+        document.getElementById('stat-vllm').className = `text-2xl font-bold ${d.vllm_status === 'online' ? 'text-green-400' : 'text-red-400'}`;
+        document.getElementById('stat-model').textContent = d.model;
+        
+        if (d.gpu.status === 'online') {
+            document.getElementById('stat-gpu').textContent = d.gpu.name?.replace('NVIDIA GeForce ', '') || '—';
+            document.getElementById('stat-gpu-mem').textContent = `${d.gpu.memory_used} / ${d.gpu.memory_total} • ${d.gpu.temperature}`;
+        } else {
+            document.getElementById('stat-gpu').textContent = 'N/A';
+        }
+        
+        document.getElementById('stat-keys').textContent = d.total_keys;
+        document.getElementById('stat-active').textContent = `${d.active_keys} active`;
+        document.getElementById('stat-requests').textContent = d.total_requests.toLocaleString();
+        
+        const dot = document.getElementById('statusDot');
+        const txt = document.getElementById('statusText');
+        if (d.vllm_status === 'online') {
+            dot.className = 'w-2 h-2 rounded-full bg-green-400 pulse-dot';
+            txt.textContent = 'Model Ready';
+        } else {
+            dot.className = 'w-2 h-2 rounded-full bg-red-400 pulse-dot';
+            txt.textContent = 'Model Offline';
+        }
+        
+        // Load logs
+        const lr = await fetch(`${BASE}/api/admin/logs`, { headers: authHeaders() });
+        const ld = await lr.json();
+        const tbody = document.getElementById('logRows');
+        const noLogs = document.getElementById('noLogs');
+        
+        if (ld.logs.length === 0) {
+            tbody.innerHTML = '';
+            noLogs.classList.remove('hidden');
+        } else {
+            noLogs.classList.add('hidden');
+            tbody.innerHTML = ld.logs.slice(-20).reverse().map(l => `
+                <tr class="text-sm">
+                    <td class="py-2.5 text-gray-400">${new Date(l.time).toLocaleTimeString()}</td>
+                    <td class="py-2.5"><span class="bg-brand-500/10 text-brand-400 px-2 py-0.5 rounded-md text-xs">${l.user}</span></td>
+                    <td class="py-2.5 text-gray-300">${l.prompt_tokens || '—'}→${l.completion_tokens || '—'}</td>
+                    <td class="py-2.5 text-gray-400">${l.latency || '—'}</td>
+                </tr>
+            `).join('');
+        }
+    } catch (e) { console.error(e); }
+}
+
+// === API Keys ===
+async function loadKeys() {
+    try {
+        const r = await fetch(`${BASE}/api/admin/keys`, { headers: authHeaders() });
+        const d = await r.json();
+        const list = document.getElementById('keysList');
+        const noKeys = document.getElementById('noKeys');
+        
+        if (d.keys.length === 0) {
+            list.innerHTML = '';
+            noKeys.classList.remove('hidden');
+            return;
+        }
+        noKeys.classList.add('hidden');
+        
+        list.innerHTML = d.keys.map(k => `
+            <div class="glass rounded-xl p-5 card-hover fade-in">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-2">
+                            <h4 class="font-semibold">${k.name}</h4>
+                            <span class="px-2 py-0.5 rounded-full text-xs ${k.active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}">${k.active ? 'Active' : 'Disabled'}</span>
+                        </div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <code class="text-sm font-mono text-gray-400 bg-surface-800/60 px-3 py-1 rounded-lg">${k.key}</code>
+                            <button onclick="copyKey('${k.full_key}')" class="text-gray-500 hover:text-brand-400 transition-colors" title="Copy full key">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            </button>
+                        </div>
+                        <div class="flex gap-4 text-xs text-gray-500">
+                            <span>Created: ${new Date(k.created).toLocaleDateString()}</span>
+                            <span>Requests: ${k.total_requests}</span>
+                            <span>Last: ${k.last_used === 'Never' ? 'Never' : new Date(k.last_used).toLocaleString()}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 ml-4">
+                        <button onclick="toggleKey('${k.full_key}')" class="p-2 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-yellow-400" title="Toggle">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${k.active ? 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' : 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'}"/></svg>
+                        </button>
+                        <button onclick="deleteKey('${k.full_key}')" class="p-2 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-red-400" title="Delete">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) { console.error(e); }
+}
+
+function showCreateKey() { document.getElementById('createKeyModal').classList.remove('hidden'); document.getElementById('keyName').focus(); }
+function closeCreateKey() { document.getElementById('createKeyModal').classList.add('hidden'); }
+
+async function createKey() {
+    const name = document.getElementById('keyName').value.trim();
+    const rate = parseInt(document.getElementById('keyRate').value) || 60;
+    if (!name) return;
+    
+    try {
+        const r = await fetch(`${BASE}/api/admin/keys`, {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ name, rate_limit: rate })
+        });
+        const d = await r.json();
+        closeCreateKey();
+        document.getElementById('keyName').value = '';
+        document.getElementById('newKeyValue').textContent = d.key;
+        document.getElementById('keyCreatedModal').classList.remove('hidden');
+        loadKeys();
+    } catch (e) { alert('Error creating key'); }
+}
+
+function closeKeyCreated() { document.getElementById('keyCreatedModal').classList.add('hidden'); }
+function copyNewKey() { navigator.clipboard.writeText(document.getElementById('newKeyValue').textContent); }
+function copyKey(key) { navigator.clipboard.writeText(key); }
+
+async function toggleKey(key) {
+    await fetch(`${BASE}/api/admin/keys/${key}/toggle`, { method: 'PATCH', headers: authHeaders() });
+    loadKeys();
+}
+
+async function deleteKey(key) {
+    if (!confirm('Delete this API key?')) return;
+    await fetch(`${BASE}/api/admin/keys/${key}`, { method: 'DELETE', headers: authHeaders() });
+    loadKeys();
+}
+
+// === Playground ===
+let chatHistory = [];
+
+function clearChat() {
+    chatHistory = [];
+    document.getElementById('chatMessages').innerHTML = `
+        <div class="text-center py-16">
+            <div class="w-14 h-14 bg-gradient-to-br from-brand-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Gemma 4 31B</h3>
+            <p class="text-gray-400 text-sm mt-1">Start a conversation to test the model</p>
+        </div>`;
+}
+
+function addMessage(role, content) {
+    const container = document.getElementById('chatMessages');
+    // Remove welcome screen
+    const welcome = container.querySelector('.text-center');
+    if (welcome) welcome.remove();
+    
+    const div = document.createElement('div');
+    div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} fade-in`;
+    div.innerHTML = `
+        <div class="max-w-[75%] rounded-2xl px-5 py-3 ${role === 'user' ? 'msg-user text-white' : 'msg-ai text-gray-100'}">
+            <p class="text-sm leading-relaxed whitespace-pre-wrap">${content}</p>
+        </div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div;
+}
+
+function addTypingIndicator() {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'flex justify-start fade-in';
+    div.id = 'typingIndicator';
+    div.innerHTML = `
+        <div class="msg-ai rounded-2xl px-5 py-4 flex gap-1.5">
+            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+        </div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function removeTypingIndicator() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+}
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    
+    input.value = '';
+    addMessage('user', msg);
+    chatHistory.push({ role: 'user', content: msg });
+    
+    addTypingIndicator();
+    document.getElementById('sendBtn').disabled = true;
+    
+    try {
+        const r = await fetch(`${BASE}/api/playground/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_pin: adminPin,
+                messages: chatHistory,
+                temperature: 0.7,
+                max_tokens: 2048,
+                stream: false
+            })
+        });
+        
+        removeTypingIndicator();
+        
+        if (!r.ok) {
+            const err = await r.json();
+            addMessage('assistant', `❌ Error: ${err.detail || 'Unknown error'}`);
+            return;
+        }
+        
+        const d = await r.json();
+        const reply = d.choices?.[0]?.message?.content || 'No response';
+        chatHistory.push({ role: 'assistant', content: reply });
+        addMessage('assistant', reply);
+    } catch (e) {
+        removeTypingIndicator();
+        addMessage('assistant', `❌ Connection error: ${e.message}`);
+    } finally {
+        document.getElementById('sendBtn').disabled = false;
+        input.focus();
+    }
+}
+
+// === Docs ===
+function updateDocsUrl() {
+    const url = `${window.location.origin}/v1`;
+    document.getElementById('docBaseUrl').textContent = url;
+    document.querySelectorAll('#page-docs code, #page-docs pre code').forEach(el => {
+        el.textContent = el.textContent.replace(/http:\/\/your-server:3000/g, window.location.origin);
+    });
+}
+
+// Auto-refresh stats
+setInterval(() => {
+    if (!document.getElementById('page-dashboard').classList.contains('hidden')) loadStats();
+}, 15000);
+</script>
+</body>
+</html>
